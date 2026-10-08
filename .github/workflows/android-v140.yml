@@ -1,0 +1,74 @@
+
+
+name: ZEE V140 APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Télécharger le dépôt
+        uses: actions/checkout@v4
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Installer Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Installer outils Android
+        run: |
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Décompresser le projet V140
+        run: |
+          mkdir -p zee-source
+          unzip -q ZEE-v140-github-actions-source.zip -d zee-source
+          echo "Contenu extrait :"
+          find zee-source -maxdepth 3 -type f | head -100
+
+      - name: Trouver le projet Android
+        id: project
+        run: |
+          ROOT=$(find zee-source -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -print -quit | xargs dirname)
+          echo "Projet Android trouvé dans : $ROOT"
+          echo "root=$ROOT" >> "$GITHUB_OUTPUT"
+
+      - name: Installer Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compiler V140
+        working-directory: ${{ steps.project.outputs.root }}
+        run: |
+          gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Chercher APK
+        run: |
+          find zee-source -type f -name "*.apk" -print
+
+      - name: Préparer APK
+        run: |
+          mkdir -p output
+          APK=$(find zee-source -type f -name "*release*.apk" -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "Aucun APK release trouvé."
+            exit 1
+          fi
+
+          cp "$APK" output/ZEE-v140-release.apk
+          ls -lh output/ZEE-v140-release.apk
+
+      - name: Publier APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZEE-v140-release
+          path: output/ZEE-v140-release.apk
